@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "CFOPSpeedcubeLab"
+rootProject.name = "CFOPSpeedcubeNative"
 include(":app")
