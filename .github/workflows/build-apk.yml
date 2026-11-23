@@ -1,41 +1,44 @@
-name: 
+name: Build Android APK (Cloud)
 
-
-
-[,]
+on:
+  push:
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build-apk:
-    runs-on: 
-    steps:
-      - name: 
-        uses: 
+    runs-on: ubuntu-latest
 
-      - name: 
-        uses: 
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 
+      - name: Fetch min2phase source if missing
         run: |
-          mkdir -p app/src/main/java/cs/min2phase
-          BASE="https://raw.githubusercontent.com/cs0x7f/min2phase/master/src"
-          for f in CoordCube.java CubieCube.java Search.java Tools.java Util.java; do
-            curl -fsSL "$BASE/$f" -o "app/src/main/java/cs/min2phase/$f"
-          done
+          if [ ! -f "app/src/main/java/cs/min2phase/Search.java" ]; then
+            git clone --depth 1 https://github.com/cs0x7f/min2phase.git /tmp/min2phase
+            mkdir -p app/src/main/java/cs/min2phase
+            cp /tmp/min2phase/*.java app/src/main/java/cs/min2phase/
+          fi
 
-      - name: 
-        uses: 
+      - name: Build Debug APK
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --no-daemon --stacktrace
+          else
+            gradle assembleDebug --no-daemon --stacktrace
+          fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          gradle-version: '8.9'
-
-      - name: 
-        run: 
-
-      - name: 
-        uses: 
-        with:
-          name: 
-          path: 
+          name: CFOP-Speedcube-Lab-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
