@@ -8,7 +8,6 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -19,26 +18,32 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Fetch min2phase source if missing
+      - name: Fetch min2phase core solver
         run: |
-          if [ ! -f "app/src/main/java/cs/min2phase/Search.java" ]; then
-            git clone --depth 1 https://github.com/cs0x7f/min2phase.git /tmp/min2phase
-            mkdir -p app/src/main/java/cs/min2phase
-            cp /tmp/min2phase/*.java app/src/main/java/cs/min2phase/
+          mkdir -p app/src/main/java/cs/min2phase
+          rm -rf /tmp/min2phase
+          git clone --depth 1 https://github.com/cs0x7f/min2phase.git /tmp/min2phase
+          for f in CoordCube.java CubieCube.java Search.java Tools.java Util.java; do
+            find /tmp/min2phase -name "$f" -exec cp {} app/src/main/java/cs/min2phase/ \;
+          done
+          ls -la app/src/main/java/cs/min2phase
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           fi
 
       - name: Build Debug APK
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew assembleDebug --no-daemon --stacktrace
-          else
-            gradle assembleDebug --no-daemon --stacktrace
-          fi
+        run: gradle assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: CFOP-Speedcube-Lab-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
