@@ -1,0 +1,41 @@
+name: 
+
+
+
+[,]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: 
+    steps:
+      - name: 
+        uses: 
+
+      - name: 
+        uses: 
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 
+        run: |
+          mkdir -p app/src/main/java/cs/min2phase
+          BASE="https://raw.githubusercontent.com/cs0x7f/min2phase/master/src"
+          for f in CoordCube.java CubieCube.java Search.java Tools.java Util.java; do
+            curl -fsSL "$BASE/$f" -o "app/src/main/java/cs/min2phase/$f"
+          done
+
+      - name: 
+        uses: 
+        with:
+          gradle-version: '8.9'
+
+      - name: 
+        run: 
+
+      - name: 
+        uses: 
+        with:
+          name: 
+          path: 
