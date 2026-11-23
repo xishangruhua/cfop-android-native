@@ -4,10 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>CFOP 魔方速拧 3D 磁力实验室 · Apple Liquid Glass</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script src="./three.min.js"></script>
 
   <style>
     /* =========================================================================
@@ -4957,7 +4955,13 @@
         }, 320);
       }
 
+      window.setNativeCubePaused = function (p) { CubeEngine.setPaused(Boolean(p)); };
       function open() {
+        if (window.AndroidNativeBridge && typeof window.AndroidNativeBridge.openNativeScanner === 'function') {
+          CubeEngine.setPaused(true);
+          window.AndroidNativeBridge.openNativeScanner();
+          return;
+        }
         CubeEngine.setPaused(true);
         document.body.classList.add('scanner-active');
         backdrop.classList.add('is-open');

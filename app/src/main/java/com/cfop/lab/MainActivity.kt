@@ -55,12 +55,9 @@ import org.opencv.android.OpenCVLoader
 import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 初始化 OpenCV 原生动态库
         OpenCVLoader.initLocal()
-
         setContent {
             MaterialTheme {
                 CFOPLabRoot(context = this)
@@ -77,13 +74,12 @@ private val FACE_ORDER = listOf(
     "U" to "U 黄顶",
     "D" to "D 白底"
 )
-// 映射到 Kociemba 54 字符数组起始偏移：U(0), R(9), F(18), D(27), L(36), B(45)
 private val FACE_OFFSET = mapOf("U" to 0, "R" to 9, "F" to 18, "D" to 27, "L" to 36, "B" to 45)
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun CFOPLabRoot(context: Context) {
-    var activeTab by remember { mutableIntStateOf(0) } // 0 = 3D 魔方实验室, 1 = 原生 CameraX+OpenCV 扫码
+    var showScanner by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     fun triggerHaptic(ms: Long = 10L) {
@@ -96,76 +92,53 @@ fun CFOPLabRoot(context: Context) {
         vib.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color(0xFFE8ECF2))) {
-        // 3D 磁力速拧魔方主舞台（扫码时隐藏释放 GPU，避免视频合成卡顿）
-        if (activeTab == 0) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.allowFileAccess = true
-                        settings.cacheMode = WebSettings.LOAD_DEFAULT
-                        addJavascriptInterface(object {
-                            @JavascriptInterface
-                            fun hapticTick() { triggerHaptic(8L) }
-                            @JavascriptInterface
-                            fun openNativeScanner() {
-                                post { activeTab = 1 }
-                            }
-                        }, "AndroidNativeBridge")
-                        loadUrl("file:///android_asset/cube_3d.html")
-                        webViewRef = this
-                    }
-                }
-            )
-        } else {
-            NativeCameraScannerScreen(
-                onClose = { activeTab = 0 },
-                onSolved = { moves ->
-                    triggerHaptic(20L)
-                    activeTab = 0
-                    webViewRef?.post {
-                        val safe = moves.replace("'", "\\'")
-                        webViewRef?.evaluateJavascript(
-                            "window.loadNativeSolution && window.loadNativeSolution('$safe', '原生 OpenCV+min2phase 最优解');",
-                            null
-                        )
-                    }
-                }
-            )
-        }
-
-        // 顶部单色液态玻璃切换条
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 8.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color(0xD9F4F5F8))
-                .border(1.dp, Color(0x3318181B), RoundedCornerShape(999.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            listOf("3D 实验室", "OpenCV 拍照求解").forEachIndexed { idx, label ->
-                val sel = activeTab == idx
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (sel) Color(0xFF18181B) else Color.Transparent)
-                        .clickable { activeTab = idx }
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = label,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (sel) Color.White else Color(0xFF52525B)
-                    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFE8ECF2))
+            .statusBarsPadding()
+            .navigationBarsPadding()
+    ) {
+        // 保持 3D 魔方 WebView 常驻不销毁；打开原生扫码时自动暂停 3D 渲染释放 GPU
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.allowFileAccess = true
+                    settings.allowFileAccessFromFileURLs = true
+                    settings.cacheMode = WebSettings.LOAD_DEFAULT
+                    addJavascriptInterface(object {
+                        @JavascriptInterface
+                        fun hapticTick() { triggerHaptic(8L) }
+                        @JavascriptInterface
+                        fun openNativeScanner() {
+                            post { showScanner = true }
+                        }
+                    }, "AndroidNativeBridge")
+                    loadUrl("file:///android_asset/cube_3d.html")
+                    webViewRef = this
                 }
             }
+        )
+
+        if (showScanner) {
+            NativeCameraScannerScreen(
+                onClose = {
+                    showScanner = false
+                    webViewRef?.evaluateJavascript("window.setNativeCubePaused && window.setNativeCubePaused(false);", null)
+                },
+                onSolved = { moves ->
+                    triggerHaptic(20L)
+                    showScanner = false
+                    val safe = moves.replace("'", "\\'")
+                    webViewRef?.evaluateJavascript(
+                        "window.setNativeCubePaused && window.setNativeCubePaused(false); window.loadNativeSolution && window.loadNativeSolution('$safe', '原生 OpenCV+min2phase 最优解');",
+                        null
+                    )
+                }
+            )
         }
     }
 }
@@ -194,7 +167,7 @@ fun NativeCameraScannerScreen(
 
     var targetIdx by remember { mutableIntStateOf(0) }
     val capturedFaces = remember { mutableStateMapOf<String, List<IntArray>>() }
-    var statusMsg by remember { mutableStateOf("请将 F 绿心面对准方框，点击「拍此面」进行 OpenCV 寻方裁剪") }
+    var statusMsg by remember { mutableStateOf("请将 F 绿心面对准方框，点击「拍此面并裁剪」") }
     var isBusy by remember { mutableStateOf(false) }
     val imageCapture = remember {
         ImageCapture.Builder()
@@ -209,12 +182,30 @@ fun NativeCameraScannerScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(top = 56.dp, start = 16.dp, end = 16.dp, bottom = 16.dp),
+            .background(Color(0xFFE8ECF2))
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // CameraX 原生预览框（纯硬件直出，不实时抽帧，绝不卡顿）
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "OpenCV 6 面寻方拍照求解",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF18181B)
+            )
+            OutlinedButton(
+                onClick = onClose,
+                shape = RoundedCornerShape(999.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+            ) {
+                Text("返回 3D", fontSize = 12.sp, color = Color(0xFF18181B))
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -249,7 +240,6 @@ fun NativeCameraScannerScreen(
                 Text("请授予相机权限以使用 OpenCV 寻方拍照", color = Color.White, fontSize = 13.sp)
             }
 
-            // 居中参考方框
             Box(
                 modifier = Modifier
                     .fillMaxSize(0.64f)
@@ -257,7 +247,6 @@ fun NativeCameraScannerScreen(
             )
         }
 
-        // 6 面进度芯片
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -292,7 +281,6 @@ fun NativeCameraScannerScreen(
 
         Text(text = statusMsg, fontSize = 12.5.sp, color = Color(0xFF3F3F46))
 
-        // 单帧抓拍 + 求解按钮
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -308,9 +296,9 @@ fun NativeCameraScannerScreen(
                             override fun onCaptureSuccess(image: ImageProxy) {
                                 scope.launch(Dispatchers.Default) {
                                     val bmp = imageProxyToBitmap(image)
-                                    image.close() // 立即归还相机缓冲区
+                                    image.close()
                                     val sample = CubeSquareDetector.detectAndSampleFace(bmp)
-                                    bmp.recycle() // 识别完立刻释放 Bitmap 内存
+                                    bmp.recycle()
                                     withContext(Dispatchers.Main) {
                                         capturedFaces[curKey] = sample.rgbGrid
                                         val next = FACE_ORDER.indexOfFirst { !capturedFaces.containsKey(it.first) }

@@ -14,6 +14,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        // 仅打包现代安卓主流 64 位架构，避免 OpenCV 塞入 4 套原生库导致 APK 超过 70MB（瘦身至约 18MB）
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {
